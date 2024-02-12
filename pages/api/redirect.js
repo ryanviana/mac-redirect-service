@@ -1,57 +1,94 @@
-import dbConnect from "@/mongodb";
-import { MongoClient } from "mongodb";
+const clicksApi = "https://mac-backend-six.vercel.app/clicks";
+const referencesApi = "https://mac-backend-six.vercel.app/references";
 
 export default async function handler(req, res) {
-  await dbConnect();
-
   const { reference } = req.query;
+  const body = JSON.stringify({ reference: reference });
 
-  const client = await MongoClient.connect(
-    "mongodb+srv://rgb:admin@nodeexpress.ps2xp1a.mongodb.net/?retryWrites=true&w=majority"
-  );
-  const db = client.db("MAC");
+  const link = await fetch(referencesApi + "/get-link-by-reference", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body,
+  });
 
-  const linkEntry = await db
-    .collection("references")
-    .findOne({ reference: `/${reference}` });
-
-  await client.close();
-
-  if (linkEntry) {
+  if (link) {
     await PayPerClick(req);
-    res.status(200).json({ url: linkEntry.link });
+    res.status(200).json({ url: link.link });
   } else {
     res.status(404).json({ message: "Not Found" });
   }
 }
 
-async function checkDatabase(ip, url) {
-  const client = await MongoClient.connect(
-    "mongodb+srv://rgb:admin@nodeexpress.ps2xp1a.mongodb.net/?retryWrites=true&w=majority"
-  );
-  const db = client.db("MAC");
+async function newIpClick(ip, reference) {
+  const body = JSON.stringify({ reference: reference, ip: ip });
 
-  const exists = await db.collection("clicks").findOne({ ip: ip, link: url });
-
-  await client.close();
+  const exists = await fetch(clicksApi + "/ip-already-clicked", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body,
+  });
 
   return !exists;
+}
+
+async function thousandClicks(reference) {
+  const body = JSON.stringify({ reference: reference });
+
+  try {
+    const response = await fetch(clicksApi + "/unpaid", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+
+    const data = await response.json();
+    console.log("Response:", data);
+  } catch (error) {
+    console.error("Error:", error);
+  }
+
+  return data.hasAtLeastThousandUnpaidClicks;
+}
+
+async function resetUnpaidCount() {
+  try {
+    const response = await fetch(clicksApi + "/reset-unpaid-count", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("Success:", result);
+  } catch (error) {
+    console.error("Error:", error);
+  }
 }
 
 async function PayPerClick(req) {
   const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
 
   const url = req.url;
+  const reference = "/" + req.query;
 
-  const shouldMakePayment = await checkDatabase(ip, url);
-
-  console.log("shouldMakePayment", shouldMakePayment);
-  console.log("ip", ip);
-  console.log("url", url);
+  const shouldMakePayment =
+    (await newIpClick(ip, url)) && (await thousandClicks(reference));
 
   if (shouldMakePayment) {
     await makePayment();
-    await saveToDatabase(ip, url);
+    await resetUnpaidCount();
+    await addNewClick(ip, url);
   }
 
   return { props: {} };
@@ -61,14 +98,25 @@ async function makePayment() {
   console.log("Payment made");
 }
 
-async function saveToDatabase(ip, url) {
-  const client = await MongoClient.connect(
-    "mongodb+srv://nodeexpress.ps2xp1a.mongodb.net/?retryWrites=true&w=majority"
-  );
-  const db = client.db("MAC");
+async function addNewClick(ip, reference) {
+  const body = JSON.stringify({ reference: reference, ip: ip });
 
-  // await db.collection("clicks").insertOne({ link: url, ip: ip });
-  console.log("saved to database" + ip + " " + url);
+  try {
+    const response = await fetch(clicksApi, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body,
+    });
 
-  await client.close();
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("Success:", result);
+  } catch (error) {
+    console.error("Error:", error);
+  }
 }
