@@ -3,21 +3,38 @@ const referencesApi = "https://mac-backend-six.vercel.app/references";
 
 export default async function handler(req, res) {
   const { reference } = req.query;
+  if (reference) {
+    const link = await getLinkByReference("/" + reference);
+    if (link) {
+      await PayPerClick(req);
+      res.status(200).json({ url: link });
+    }
+  }
+}
+
+async function getLinkByReference(reference) {
+  if (reference === "/undefined") return;
+
   const body = JSON.stringify({ reference: reference });
 
-  const link = await fetch(referencesApi + "/get-link-by-reference", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body,
-  });
+  try {
+    const response = await fetch(referencesApi + "/get-link-by-reference", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body,
+    });
 
-  if (link) {
-    await PayPerClick(req);
-    res.status(200).json({ url: link.link });
-  } else {
-    res.status(404).json({ message: "Not Found" });
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.text();
+    console.log("Success:", result);
+    return result;
+  } catch (error) {
+    console.error("Error:", error);
   }
 }
 
