@@ -37,6 +37,7 @@ async function checkDatabase(ip, url) {
 
   return !exists;
 }
+
 async function PayPerClick(req) {
   const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
 
