@@ -122,12 +122,12 @@ async function makePayment(/* advertiser: ContractAddress, creator: ContractAddr
   try {
 
     const provider = new RpcProvider({ network: constants.NetworkName.SN_GOERLI });
-    const PayPerClickContract = new Contract(PayPerClickJSON.abi, 0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812, provider);
+    const PayPerClickContract = new Contract(PayPerClickJSON, 0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812, provider);
   
     await PayPerClickContract.payCreator(); //Passar parametros
     
     console.log("Payment made");
-    
+
   } catch (error) {
     console.error("Error creating campaign:", error);
   }
