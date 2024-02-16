@@ -1,5 +1,8 @@
 const clicksApi = "https://mac-backend-six.vercel.app/clicks";
 const referencesApi = "https://mac-backend-six.vercel.app/references";
+import PayPerClickJSON from "../../abis/PayPerClick.json";
+import { RpcProvider, Contract } from "starknet";
+
 
 export default async function handler(req, res) {
   const { reference } = req.query;
@@ -111,8 +114,23 @@ async function PayPerClick(req) {
   return { props: {} };
 }
 
-async function makePayment() {
-  console.log("Payment made");
+async function makePayment(/* advertiser: ContractAddress, creator: ContractAddress, index: u32 */) {
+
+  // Tem que passar os parâmetros corretos tanto pra essa função como na função abaixo para o contrato
+  // Adicione o JSON do PayPerClick na pasta "abis"
+
+  try {
+
+    const provider = new RpcProvider({ network: constants.NetworkName.SN_GOERLI });
+    const PayPerClickContract = new Contract(PayPerClickJSON.abi, 0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812, provider);
+  
+    await PayPerClickContract.payCreator(); //Passar parametros
+    
+    console.log("Payment made");
+    
+  } catch (error) {
+    console.error("Error creating campaign:", error);
+  }
 }
 
 async function addNewClick(ip, reference) {
