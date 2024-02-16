@@ -123,6 +123,7 @@ async function PayPerClick(req) {
 
   const url = req.url;
   const reference = "/" + req.query;
+
   let announcement = await findAnnouncementByReference(reference);
   let advertiserAddress = announcement.advertiserWalletAddress;
   let creatorAddress = announcement.creatorWalletAddress;
