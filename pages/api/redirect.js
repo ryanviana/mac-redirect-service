@@ -3,17 +3,67 @@ const referencesApi = "https://mac-backend-six.vercel.app/references";
 const announcementApi = "https://mac-backend-six.vercel.app/announcements";
 
 import PayPerClickJSON from "../../abis/PayPerClick.json";
-import { RpcProvider, Contract } from "starknet";
+import { Account, Contract, RpcProvider } from "starknet";
+require("dotenv").config();
 
 export default async function handler(req, res) {
   const { reference } = req.query;
   if (reference) {
-    const link = await getLinkByReference("/" + reference);
+    const referenceRegister = await getReferenceRegister(reference);
+    // const link = await getLinkByReference("/" + reference);
+    // const reference = "/" + req.query;
+    // const link = referenceRegister.link;
+    const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    const url = req.url;
     if (link) {
-      await PayPerClick(req);
-      res.status(200).json({ url: link });
+      await PayPerClick(ip, referenceRegister);
+      res.status(200).json({ url: referenceRegister.link });
     }
   }
+}
+
+async function getReferenceRegister(reference) {
+  try {
+    const response = await fetch(
+      referencesApi + "/get-id-by-reference" + "/" + reference,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("Success:", result);
+    return result;
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
+
+async function PayPerClick(ip, referenceRegister) {
+  let announcement = await findAnnouncementByReference(
+    referenceRegister.referenceRegister
+  );
+  let advertiserAddress = announcement.advertiserWalletAddress;
+  let creatorAddress = announcement.creatorWalletAddress;
+  let announcementIndex = announcement.starknetIndex;
+
+  const shouldMakePayment =
+    (await newIpClick(ip, url)) && (await thousandClicks(reference));
+
+  if (shouldMakePayment) {
+    await makePayment(advertiserAddress, creatorAddress, announcementIndex);
+    await resetUnpaidCount();
+    await addNewClick(ip, url);
+  }
+
+  return { props: {} };
 }
 
 async function findAnnouncementByReference(reference) {
@@ -118,36 +168,15 @@ async function resetUnpaidCount() {
   }
 }
 
-async function PayPerClick(req) {
-  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-
-  const url = req.url;
-  const reference = "/" + req.query;
-
-  let announcement = await findAnnouncementByReference(reference);
-  let advertiserAddress = announcement.advertiserWalletAddress;
-  let creatorAddress = announcement.creatorWalletAddress;
-  let announcementIndex = announcement.starknetIndex;
-
-  const shouldMakePayment =
-    (await newIpClick(ip, url)) && (await thousandClicks(reference));
-
-  if (shouldMakePayment) {
-    await makePayment(advertiserAddress, creatorAddress, announcementIndex);
-    await resetUnpaidCount();
-    await addNewClick(ip, url);
-  }
-
-  return { props: {} };
-}
-
 async function makePayment(
   advertiserAddress,
   creatorAddress,
   announcementIndex
 ) {
   // Adicione o JSON do PayPerClick na pasta "abis"
-
+  const privateKey = process.env.PRIVATE_KEY;
+  const accountAddress = process.env.PUBLIC_KEY;
+  const account = new Account(provider, accountAddress, privateKey);
   try {
     const provider = new RpcProvider({
       network: constants.NetworkName.SN_GOERLI,
@@ -157,6 +186,7 @@ async function makePayment(
       "0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812",
       provider
     );
+    PayPerClickContract.connect(account);
 
     await PayPerClickContract.payCreator(
       advertiserAddress,
