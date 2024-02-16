@@ -1,8 +1,9 @@
 const clicksApi = "https://mac-backend-six.vercel.app/clicks";
 const referencesApi = "https://mac-backend-six.vercel.app/references";
+const announcementApi = "https://mac-backend-six.vercel.app/announcements";
+
 import PayPerClickJSON from "../../abis/PayPerClick.json";
 import { RpcProvider, Contract } from "starknet";
-
 
 export default async function handler(req, res) {
   const { reference } = req.query;
@@ -12,6 +13,27 @@ export default async function handler(req, res) {
       await PayPerClick(req);
       res.status(200).json({ url: link });
     }
+  }
+}
+
+async function findAnnouncementByReference(reference) {
+  try {
+    const response = await fetch(announcementApi + "/" + reference, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("Success:", result);
+    return result;
+  } catch (error) {
+    console.error("Error:", error);
   }
 }
 
@@ -101,12 +123,16 @@ async function PayPerClick(req) {
 
   const url = req.url;
   const reference = "/" + req.query;
+  let announcement = await findAnnouncementByReference(reference);
+  let advertiserAddress = announcement.advertiserWalletAddress;
+  let creatorAddress = announcement.creatorWalletAddress;
+  let announcementIndex = announcement.starknetIndex;
 
   const shouldMakePayment =
     (await newIpClick(ip, url)) && (await thousandClicks(reference));
 
   if (shouldMakePayment) {
-    await makePayment();
+    await makePayment(advertiserAddress, creatorAddress, announcementIndex);
     await resetUnpaidCount();
     await addNewClick(ip, url);
   }
@@ -114,20 +140,30 @@ async function PayPerClick(req) {
   return { props: {} };
 }
 
-async function makePayment(/* advertiser: ContractAddress, creator: ContractAddress, index: u32 */) {
-
-  // Tem que passar os parâmetros corretos tanto pra essa função como na função abaixo para o contrato
+async function makePayment(
+  advertiserAddress,
+  creatorAddress,
+  announcementIndex
+) {
   // Adicione o JSON do PayPerClick na pasta "abis"
 
   try {
+    const provider = new RpcProvider({
+      network: constants.NetworkName.SN_GOERLI,
+    });
+    const PayPerClickContract = new Contract(
+      PayPerClickJSON,
+      "0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812",
+      provider
+    );
 
-    const provider = new RpcProvider({ network: constants.NetworkName.SN_GOERLI });
-    const PayPerClickContract = new Contract(PayPerClickJSON, 0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812, provider);
-  
-    await PayPerClickContract.payCreator(); //Passar parametros
-    
+    await PayPerClickContract.payCreator(
+      advertiserAddress,
+      creatorAddress,
+      announcementIndex
+    );
+
     console.log("Payment made");
-
   } catch (error) {
     console.error("Error creating campaign:", error);
   }
