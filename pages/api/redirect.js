@@ -1,7 +1,7 @@
 const clicksApi = "https://mac-backend-six.vercel.app/clicks";
 const referencesApi = "https://mac-backend-six.vercel.app/references";
 import PayPerClickJSON from "../../abis/PayPerClick.json";
-import { RpcProvider, Contract } from "starknet";
+import { Account, Contract, RpcProvider } from "starknet";
 
 
 export default async function handler(req, res) {
@@ -121,9 +121,15 @@ async function makePayment(/* advertiser: ContractAddress, creator: ContractAddr
 
   try {
 
+    const privateKey = ""; // Se pa vale por em .env
+    const accountAddress = "";
+    const account = new Account(provider, accountAddress, privateKey);
+
     const provider = new RpcProvider({ network: constants.NetworkName.SN_GOERLI });
     const PayPerClickContract = new Contract(PayPerClickJSON, 0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812, provider);
   
+    PayPerClickContract.connect(account);
+
     await PayPerClickContract.payCreator(); //Passar parametros
     
     console.log("Payment made");
