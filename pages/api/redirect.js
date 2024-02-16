@@ -1,109 +1,42 @@
-const clicksApi = "https://mac-backend-six.vercel.app/clicks";
-const referencesApi = "https://mac-backend-six.vercel.app/references";
+import {
+  getAnnouncementById,
+  getReferenceByReference,
+  getLinkByReference,
+  newIpClick,
+  thousandClicks,
+  resetUnpaidCount,
+  addNewClick,
+} from "@/mac-api";
+import PayPerClickJSON from "../../abis/PayPerClick.json";
+import { Account, Contract, RpcProvider } from "starknet";
 
 export default async function handler(req, res) {
   const { reference } = req.query;
   if (reference) {
+    const referenceRegister = await getReferenceByReference(reference);
+    console.log("referenceRegister:", referenceRegister);
     const link = await getLinkByReference("/" + reference);
     if (link) {
-      await PayPerClick(req);
+      await PayPerClick(req, referenceRegister);
       res.status(200).json({ url: link });
     }
   }
 }
 
-async function getLinkByReference(reference) {
-  if (reference === "/undefined") return;
-
-  const body = JSON.stringify({ reference: reference });
-
-  try {
-    const response = await fetch(referencesApi + "/get-link-by-reference", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const result = await response.text();
-    console.log("Success:", result);
-    return result;
-  } catch (error) {
-    console.error("Error:", error);
-  }
-}
-
-async function newIpClick(ip, reference) {
-  const body = JSON.stringify({ reference: reference, ip: ip });
-
-  const exists = await fetch(clicksApi + "/ip-already-clicked", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body,
-  });
-
-  return !exists;
-}
-
-async function thousandClicks(reference) {
-  const body = JSON.stringify({ reference: reference });
-
-  try {
-    const response = await fetch(clicksApi + "/unpaid", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body,
-    });
-
-    const data = await response.json();
-    console.log("Response:", data);
-  } catch (error) {
-    console.error("Error:", error);
-  }
-
-  return data.hasAtLeastThousandUnpaidClicks;
-}
-
-async function resetUnpaidCount() {
-  try {
-    const response = await fetch(clicksApi + "/reset-unpaid-count", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    console.log("Success:", result);
-  } catch (error) {
-    console.error("Error:", error);
-  }
-}
-
-async function PayPerClick(req) {
+async function PayPerClick(req, referenceRegister) {
   const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-
   const url = req.url;
   const reference = "/" + req.query;
+  const announcement = await getAnnouncementById(
+    referenceRegister.announcementId
+  );
+  console.log("announcement:", announcement);
 
   const shouldMakePayment =
     (await newIpClick(ip, url)) && (await thousandClicks(reference));
 
   if (shouldMakePayment) {
-    await makePayment();
+    await makePayment(announcement);
     await resetUnpaidCount();
     await addNewClick(ip, url);
   }
@@ -111,29 +44,33 @@ async function PayPerClick(req) {
   return { props: {} };
 }
 
-async function makePayment() {
-  console.log("Payment made");
-}
+async function makePayment(announcement) {
+  {
+    console.log("Making payment for announcement: ", announcement);
+    // Adicione o JSON do PayPerClick na pasta "abis"
+    const privateKey = "PK_HERE_FROM_ENV";
+    const accountAddress = "ADDRESS_HERE_FROM_ENV";
+    const account = new Account(provider, accountAddress, privateKey);
+    try {
+      const provider = new RpcProvider({
+        network: constants.NetworkName.SN_GOERLI,
+      });
+      const PayPerClickContract = new Contract(
+        PayPerClickJSON,
+        "0x0565a1b3fa403889aa0bd47656158ec193232b2a2467651e74e08ac4c93eb812",
+        provider
+      );
+      PayPerClickContract.connect(account);
 
-async function addNewClick(ip, reference) {
-  const body = JSON.stringify({ reference: reference, ip: ip });
+      await PayPerClickContract.payCreator(
+        "advertiserAddres_HERE",
+        "creatorAddress_HERE",
+        1 //"announcementINDEX_HERE"
+      );
 
-  try {
-    const response = await fetch(clicksApi, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      console.log("Payment made");
+    } catch (error) {
+      console.error("Error creating campaign:", error);
     }
-
-    const result = await response.json();
-    console.log("Success:", result);
-  } catch (error) {
-    console.error("Error:", error);
   }
 }
